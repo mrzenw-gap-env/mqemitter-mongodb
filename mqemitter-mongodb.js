@@ -94,7 +94,7 @@ function MQEmitterMongoDB(opts) {
   opts.size = opts.size || 10 * 1024 * 1024 // 10 MB
   opts.max = opts.max || 10000 // documents
   opts.collection = opts.collection || 'pubsub'
-  opts.useCappedCollection = opts.useCappedCollection || true
+  opts.useCappedCollection = opts.useCappedCollection !== false // default true
 
   const url = opts.url || 'mongodb://127.0.0.1/mqemitter'
   this.status = new EE()
