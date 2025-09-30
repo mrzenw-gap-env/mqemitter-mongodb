@@ -9,7 +9,7 @@ const MQEmitter = require('mqemitter')
 const { pipeline, Transform } = require('stream')
 const EE = require('events').EventEmitter
 
-function connectClient (url, opts, cb) {
+function connectClient(url, opts, cb) {
   MongoClient.connect(url, opts)
     .then(client => {
       process.nextTick(cb, null, client)
@@ -21,7 +21,7 @@ function connectClient (url, opts, cb) {
 
 // check if the collection exists and is capped
 // if not create it
-async function checkCollection (ctx, next) {
+async function checkCollection(ctx, next) {
   // ping to see if database is connected
   try {
     await ctx._db.command({ ping: 1 })
@@ -33,31 +33,35 @@ async function checkCollection (ctx, next) {
   const collections = await ctx._db.listCollections({ name: collectionName }).toArray()
   if (collections.length > 0) {
     ctx._collection = ctx._db.collection(collectionName)
-    if (!await ctx._collection.isCapped()) {
-      // the collection is not capped, make it so
-      await ctx._db.command({
-        convertToCapped: collectionName,
-        size: ctx._opts.size,
-        max: ctx._opts.max
-      })
+    // convert to capped if useCappedCollection is not false
+    if (ctx._opts.useCappedCollection !== false) {
+      if (!await ctx._collection.isCapped()) {
+        // the collection is not capped, make it so
+        await ctx._db.command({
+          convertToCapped: collectionName,
+          size: ctx._opts.size,
+          max: ctx._opts.max
+        })
+      }
     }
   } else {
     // collection does not exist yet create it
-    await ctx._db.createCollection(collectionName, {
-      capped: true,
-      size: ctx._opts.size,
-      max: ctx._opts.max
-    })
+    await ctx._db.createCollection(collectionName,
+      ctx._opts.useCappedCollection === false ? {} : {
+        capped: true,
+        size: ctx._opts.size,
+        max: ctx._opts.max
+      })
     ctx._collection = ctx._db.collection(collectionName)
   }
   process.nextTick(next)
 }
 
 // Create a Transform stream to process each object
-function buildTransform (ctx, failures, oldEmit) {
+function buildTransform(ctx, failures, oldEmit) {
   return new Transform({
     objectMode: true,
-    transform (obj, enc, cb) {
+    transform(obj, enc, cb) {
       if (ctx.closed) {
         return cb() // Stop processing if closed
       }
@@ -81,7 +85,7 @@ function buildTransform (ctx, failures, oldEmit) {
   })
 }
 
-function MQEmitterMongoDB (opts) {
+function MQEmitterMongoDB(opts) {
   if (!(this instanceof MQEmitterMongoDB)) {
     return new MQEmitterMongoDB(opts)
   }
@@ -90,6 +94,7 @@ function MQEmitterMongoDB (opts) {
   opts.size = opts.size || 10 * 1024 * 1024 // 10 MB
   opts.max = opts.max || 10000 // documents
   opts.collection = opts.collection || 'pubsub'
+  opts.useCappedCollection = opts.useCappedCollection || true
 
   const url = opts.url || 'mongodb://127.0.0.1/mqemitter'
   this.status = new EE()
@@ -105,7 +110,7 @@ function MQEmitterMongoDB (opts) {
     that._db = opts.db
     setImmediate(waitStartup)
   } else {
-    const defaultOpts = { }
+    const defaultOpts = {}
     const mongoOpts = that._opts.mongo ? Object.assign(defaultOpts, that._opts.mongo) : defaultOpts
     connectClient(url, mongoOpts, function (err, client) {
       if (err) {
@@ -125,7 +130,7 @@ function MQEmitterMongoDB (opts) {
   this._hasStream = false
   this._started = false
 
-  function waitStartup () {
+  function waitStartup() {
     checkCollection(that, setLast)
   }
 
@@ -136,7 +141,7 @@ function MQEmitterMongoDB (opts) {
   this._executingBulk = false
   let failures = 0
 
-  async function setLast () {
+  async function setLast() {
     try {
       const results = await that._collection
         .find({}, { timeout: false })
@@ -156,7 +161,7 @@ function MQEmitterMongoDB (opts) {
     }
   }
 
-  async function start () {
+  async function start() {
     if (that.closed) { return }
 
     try {
@@ -272,6 +277,6 @@ MQEmitterMongoDB.prototype.close = function (cb) {
   return this
 }
 
-function noop () { }
+function noop() { }
 
 module.exports = MQEmitterMongoDB

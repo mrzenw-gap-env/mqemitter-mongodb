@@ -52,6 +52,7 @@ Options:
 * `database`: a mongodb database name, by default it comes from the uri
 * `mongo`: options for mongodb client
 * `db`: a db instance of mongodb (instead of url)
+* `useCappedCollection`: use a capped collection for the messages (default: true)
 
 
 Acknowledgements
